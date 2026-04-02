@@ -14,6 +14,7 @@ export interface WheelItem {
 
 export interface WinnerRequest {
     id: string;
+    groupId: string; // <-- NEW
     requesterUsername: string;
     message?: string;
     upvotes: number;
@@ -24,22 +25,20 @@ export interface WinnerRequest {
 }
 
 interface RequestPanelProps {
+    groupId: string; // <-- NEW
     items: WheelItem[];
     requests: WinnerRequest[];
     username: string | null;
     onRefresh: () => void;
 }
 
-export default function RequestPanel({ items, requests, username, onRefresh }: RequestPanelProps) {
+export default function RequestPanel({ groupId, items, requests, username, onRefresh }: RequestPanelProps) {
     const [message, setMessage] = useState('');
 
     const pendingRequests = requests.filter(r => r.status === 'PENDING');
     const historyRequests = requests.filter(r => r.status !== 'PENDING');
 
-    // 1. Check if they already have an active request
     const hasPendingRequest = pendingRequests.some(r => r.requesterUsername === username);
-
-    // 2. Find the wheel item that matches their username
     const myWheelItem = items.find(i => i.name.toLowerCase() === (username || '').toLowerCase());
 
     const handleCreateRequest = async () => {
@@ -51,15 +50,15 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    groupId, // <-- Sent to backend
                     requesterUsername: username,
-                    wheelItemId: myWheelItem.id,
-                    message: message // Only sending these 3 things now!
+                    message
                 }),
             });
 
             if (response.ok) {
                 Alert.alert("Success", "Request submitted for voting!");
-                setMessage(''); // Clear the input
+                setMessage('');
                 onRefresh();
             } else {
                 const err = await response.text();
@@ -93,10 +92,9 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
     return (
         <View style={styles.requestPanelContainer}>
             <View style={styles.divider} />
-
             <ThemedText type="title" style={{ marginBottom: 20, textAlign: 'center' }}>Requests Panel</ThemedText>
 
-            {/* === CREATE REQUEST === */}
+            {/* CREATE REQUEST */}
             <ThemedView style={styles.card}>
                 <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Volunteer to Win</ThemedText>
 
@@ -106,7 +104,7 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                     </ThemedText>
                 ) : !myWheelItem ? (
                     <ThemedText style={{ color: '#ff4444', fontStyle: 'italic', marginTop: 5 }}>
-                        You must add your username "{username}" to the wheel before you can make a request.
+                        You must be an active member of this group to make a request.
                     </ThemedText>
                 ) : (
                     <View>
@@ -115,7 +113,7 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                         </ThemedText>
                         <TextInput
                             style={styles.input}
-                            placeholder="I'll do the chores today! (Optional)"
+                            placeholder="I'll do the chores today! (+2 points on wheel)"
                             placeholderTextColor="#888"
                             value={message}
                             onChangeText={setMessage}
@@ -128,7 +126,7 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                 )}
             </ThemedView>
 
-            {/* === ACTIVE VOTES === */}
+            {/* ACTIVE VOTES */}
             <ThemedText type="subtitle" style={styles.sectionTitle}>Active Votes</ThemedText>
             {pendingRequests.length === 0 ? (
                 <ThemedText style={styles.emptyText}>No pending requests.</ThemedText>
@@ -141,7 +139,6 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                                 {req.requesterUsername} requested to be the winner
                             </ThemedText>
 
-                            {/* Display the message if they wrote one */}
                             {req.message ? (
                                 <ThemedText style={styles.messageText}>"{req.message}"</ThemedText>
                             ) : null}
@@ -168,7 +165,7 @@ export default function RequestPanel({ items, requests, username, onRefresh }: R
                 })
             )}
 
-            {/* === HISTORY === */}
+            {/* HISTORY */}
             <ThemedText type="subtitle" style={[styles.sectionTitle, { marginTop: 30 }]}>History</ThemedText>
             {historyRequests.length === 0 ? (
                 <ThemedText style={styles.emptyText}>No history yet.</ThemedText>
@@ -202,13 +199,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
         borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)',
     },
-    // NEW: TextInput style
     input: {
         height: 45, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
         borderRadius: 8, paddingHorizontal: 15, color: '#fff',
         marginBottom: 15, backgroundColor: 'rgba(0,0,0,0.2)',
     },
-    // NEW: Message text style
     messageText: { fontStyle: 'italic', color: '#ccc', marginTop: 5, marginBottom: 5 },
     chip: { backgroundColor: '#4A90E2', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20 },
     chipText: { color: 'white', fontWeight: 'bold', fontSize: 13 },

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @Document(collection = "WheelLock")
 public class WheelLock {
     @Id
-    private String id = "GLOBAL_LOCK"; // We only ever want ONE lock in the database
+    private String id;
 
     private boolean isLocked = false;
     private String lockedBy;

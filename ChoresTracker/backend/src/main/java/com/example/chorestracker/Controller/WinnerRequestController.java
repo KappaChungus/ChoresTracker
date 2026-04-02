@@ -1,11 +1,11 @@
 package com.example.chorestracker.Controller;
 
 import com.example.chorestracker.Model.CurrentWinner;
-import com.example.chorestracker.Model.WheelItem;
+import com.example.chorestracker.Model.MemberStat;
+import com.example.chorestracker.Model.WheelGroup;
 import com.example.chorestracker.Model.WinnerRequest;
 import com.example.chorestracker.repository.ICurrentWinnerRepository;
-import com.example.chorestracker.repository.IUserRepository;
-import com.example.chorestracker.repository.IWheelRepository;
+import com.example.chorestracker.repository.IWheelGroupRepository;
 import com.example.chorestracker.repository.IWinnerRequestRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -21,37 +21,49 @@ import java.util.Optional;
 public class WinnerRequestController {
 
     @Autowired private IWinnerRequestRepository requestRepository;
-    @Autowired private IUserRepository userRepository;
-    @Autowired private IWheelRepository wheelRepository;
+    @Autowired private IWheelGroupRepository wheelGroupRepository;
     @Autowired private ICurrentWinnerRepository currentWinnerRepository;
 
-    // Get all requests (Sorted by newest first could be done on frontend)
-    @GetMapping
-    public List<WinnerRequest> getAllRequests() {
-        return requestRepository.findAll();
+    // Get all requests FOR A SPECIFIC GROUP
+    @GetMapping("/group/{groupId}")
+    public List<WinnerRequest> getRequestsByGroup(@PathVariable String groupId) {
+        return requestRepository.findAll().stream()
+                .filter(r -> groupId.equals(r.getGroupId()))
+                .toList();
     }
 
     // Create a new request
     @PostMapping
     public ResponseEntity<?> createRequest(@RequestBody WinnerRequest request) {
 
-        // BOUNDARY 1: Check if user already has a pending request
+        if (request.getGroupId() == null || request.getRequesterUsername() == null) {
+            return ResponseEntity.badRequest().body("Group ID and Username are required.");
+        }
+
+        // BOUNDARY 1: Check if user already has a pending request in THIS group
         boolean hasPending = requestRepository.findAll().stream()
-                .anyMatch(r -> "PENDING".equals(r.getStatus()) && r.getRequesterUsername().equals(request.getRequesterUsername()));
+                .anyMatch(r -> "PENDING".equals(r.getStatus())
+                        && r.getRequesterUsername().equalsIgnoreCase(request.getRequesterUsername())
+                        && request.getGroupId().equals(r.getGroupId()));
 
         if (hasPending) {
             return ResponseEntity.badRequest().body("You already have a pending request.");
         }
 
-        // BOUNDARY 2 & 3 COMBINED: Fetch the item and ensure it belongs to the requester
-        Optional<WheelItem> wheelItemOpt = wheelRepository.findById(request.getWheelItemId());
-        if (wheelItemOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body("This account is not on the wheel.");
+        // BOUNDARY 2: Ensure the group exists
+        Optional<WheelGroup> groupOpt = wheelGroupRepository.findById(request.getGroupId());
+        if (groupOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body("Group not found.");
         }
 
-        // If the name on the wheel doesn't perfectly match the logged-in username, block it!
-        if (!wheelItemOpt.get().getName().equalsIgnoreCase(request.getRequesterUsername())) {
-            return ResponseEntity.badRequest().body("You can only request yourself as the winner.");
+        WheelGroup group = groupOpt.get();
+
+        // BOUNDARY 3: Ensure the requester is actually a member of the group!
+        boolean isMember = group.getMembers().stream()
+                .anyMatch(m -> m.getUsername().equalsIgnoreCase(request.getRequesterUsername()));
+
+        if (!isMember) {
+            return ResponseEntity.badRequest().body("You are not a member of this group.");
         }
 
         request.setCreatedAt(LocalDateTime.now());
@@ -73,7 +85,7 @@ public class WinnerRequestController {
 
         WinnerRequest request = reqOpt.get();
 
-        // 1. Validate request state and user
+        // 1. Validate request state
         if (!request.getStatus().equals("PENDING")) {
             return ResponseEntity.badRequest().body("This request is already closed.");
         }
@@ -81,31 +93,49 @@ public class WinnerRequestController {
             return ResponseEntity.badRequest().body("User has already voted.");
         }
 
-        // 2. Register the vote
+        // 2. Fetch the group and validate the voter is a member
+        Optional<WheelGroup> groupOpt = wheelGroupRepository.findById(request.getGroupId());
+        if (groupOpt.isEmpty()) return ResponseEntity.badRequest().body("Associated group not found.");
+        WheelGroup group = groupOpt.get();
+
+        boolean isVoterMember = group.getMembers().stream()
+                .anyMatch(m -> m.getUsername().equalsIgnoreCase(username));
+        if (!isVoterMember) {
+            return ResponseEntity.badRequest().body("Only members of this group can vote.");
+        }
+
+        // 3. Register the vote
         request.getVotedUsers().add(username);
         if ("UP".equals(voteType)) request.setUpvotes(request.getUpvotes() + 1);
         else if ("DOWN".equals(voteType)) request.setDownvotes(request.getDownvotes() + 1);
 
-        // 3. Evaluate 50% logic
-        long totalUsers = userRepository.count();
-        double threshold = totalUsers / 2.0; // 50% of total registered users
+        // 4. Evaluate 50% logic based on GROUP size, not total global users!
+        long totalGroupMembers = group.getMembers().size();
+        double threshold = totalGroupMembers / 2.0;
 
         if (request.getUpvotes() >= threshold) {
             request.setStatus("APPROVED");
 
             // --- AUTOMATIC WINNER ASSIGNMENT ---
-            // A. Increment Occurrences (points)
-            Optional<WheelItem> itemOpt = wheelRepository.findById(request.getWheelItemId());
-            if (itemOpt.isPresent()) {
-                WheelItem item = itemOpt.get();
-                item.setOccurrences(item.getOccurrences() + 2);
-                wheelRepository.save(item);
+            // A. Increment Occurrences (points) for the winner in the group
+            for (MemberStat member : group.getMembers()) {
+                if (member.getUsername().equalsIgnoreCase(request.getRequesterUsername())) {
+                    member.setOccurrences(member.getOccurrences() + 2);
+                    break;
+                }
             }
+            wheelGroupRepository.save(group); // Save the updated occurrences
 
-            // B. Set as Current Winner
-            currentWinnerRepository.deleteAll();
+            // B. Clear the old winner FOR THIS SPECIFIC GROUP only
+            List<CurrentWinner> oldWinners = currentWinnerRepository.findAll().stream()
+                    .filter(cw -> request.getGroupId().equals(cw.getGroupId()))
+                    .toList();
+            currentWinnerRepository.deleteAll(oldWinners);
+
+            // C. Set the new winner
             CurrentWinner newWinner = new CurrentWinner();
-            newWinner.setWheelItemId(request.getWheelItemId());
+            newWinner.setGroupId(request.getGroupId());
+            newWinner.setUsername(request.getRequesterUsername());
             newWinner.setWinTime(LocalDateTime.now());
             currentWinnerRepository.save(newWinner);
 

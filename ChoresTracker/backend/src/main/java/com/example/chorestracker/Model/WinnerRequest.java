@@ -1,6 +1,5 @@
 package com.example.chorestracker.Model;
 
-
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import lombok.Data;
@@ -14,8 +13,8 @@ public class WinnerRequest {
     @Id
     private String id;
 
+    private String groupId;
     private String requesterUsername;
-    private String wheelItemId;
     private String message;
 
     private int upvotes = 0;
