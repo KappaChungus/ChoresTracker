@@ -1,7 +1,10 @@
+// mobile-app/app/login.tsx
+
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { fetchWithAuth } from '@/utils/api'; // <-- IMPORTED UTILITY
 
 interface LoginProps {
     onLoginSuccess: (token: string) => void;
@@ -13,10 +16,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginProps) {
 
     const handleLogin = async () => {
         try {
-
-            const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/login`, {
+            const response = await fetchWithAuth(`/api/auth/login`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
 

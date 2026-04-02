@@ -1,5 +1,3 @@
-// mobile-app/app/(tabs)/index.tsx
-
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
@@ -20,8 +18,8 @@ import Wheel from '@/components/Wheel';
 import RequestPanel, { WheelItem, WinnerRequest } from '@/components/RequestPanel';
 import * as SecureStore from 'expo-secure-store';
 import * as Clipboard from 'expo-clipboard';
+import { fetchWithAuth } from '@/utils/api';
 
-// View States for our flow
 type ViewState = 'LOGIN' | 'GROUPS' | 'WHEEL';
 
 interface WheelGroup {
@@ -44,6 +42,7 @@ export default function HomeScreen() {
 
   // Authentication & Groups
   const [username, setUsername] = useState<string | null>(null);
+  const [jwtToken, setJwtToken] = useState<string | null>(null);
   const [inputUsername, setInputUsername] = useState('');
   const [inputPassword, setInputPassword] = useState('');
   const [userGroups, setUserGroups] = useState<WheelGroup[]>([]);
@@ -70,9 +69,11 @@ export default function HomeScreen() {
   const checkLoginStatus = async () => {
     setLoading(true);
     let storedUser = Platform.OS === 'web' ? localStorage.getItem('userToken') : await SecureStore.getItemAsync('userToken');
+    let storedToken = Platform.OS === 'web' ? localStorage.getItem('jwtToken') : await SecureStore.getItemAsync('jwtToken');
 
-    if (storedUser) {
+    if (storedUser && storedToken) {
       setUsername(storedUser);
+      setJwtToken(storedToken);
       await fetchUserGroups(storedUser);
     } else {
       setViewState('LOGIN');
@@ -89,23 +90,29 @@ export default function HomeScreen() {
     const user = inputUsername.trim();
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      // Replaced with fetchWithAuth (it will securely attach the URL prefix & headers)
+      const response = await fetchWithAuth(`/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: user, password: inputPassword }),
       });
 
       if (response.ok) {
+        const data = await response.json();
+        const { token, username: returnedUser } = data;
+
+        // FIXED: Securely storing both the username AND the jwtToken
         if (Platform.OS === 'web') {
-          localStorage.setItem('userToken', user);
+          localStorage.setItem('userToken', returnedUser);
+          localStorage.setItem('jwtToken', token);
         } else {
-          await SecureStore.setItemAsync('userToken', user);
+          await SecureStore.setItemAsync('userToken', returnedUser);
+          await SecureStore.setItemAsync('jwtToken', token);
         }
 
-        setUsername(user);
+        setUsername(returnedUser);
+        setJwtToken(token);
         setInputPassword(''); // Clear password from memory
-        await fetchUserGroups(user);
+        await fetchUserGroups(returnedUser);
       } else {
         Alert.alert('Error', 'Invalid username or password.');
       }
@@ -115,29 +122,39 @@ export default function HomeScreen() {
   };
 
   const handleLogout = async () => {
-    if (Platform.OS === 'web') localStorage.removeItem('userToken');
-    else await SecureStore.deleteItemAsync('userToken');
+    // Clean up all storage items on logout
+    if (Platform.OS === 'web') {
+      localStorage.removeItem('userToken');
+      localStorage.removeItem('jwtToken');
+    } else {
+      await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('jwtToken');
+    }
     setUsername(null);
+    setJwtToken(null);
     setViewState('LOGIN');
   };
 
   // --- GROUPS LOGIC ---
   const fetchUserGroups = async (user: string) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/api/groups/user/${user}`);
+      const res = await fetchWithAuth(`/api/groups/user/${user}`);
       if (res.ok) {
         const groups: WheelGroup[] = await res.json();
         setUserGroups(groups);
 
         if (groups.length === 1) {
-          // Auto-redirect to their only group
           loadGroupData(groups[0]);
         } else {
           setViewState('GROUPS');
         }
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message === "AUTH_EXPIRED") {
+        Alert.alert("Session Expired", "Please log in again.");
+        handleLogout();
+        return;
+      }
       setError("Could not connect to server");
     } finally {
       setLoading(false);
@@ -151,10 +168,9 @@ export default function HomeScreen() {
     }
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/api/groups`, {
+      // Replaced with fetchWithAuth
+      const res = await fetchWithAuth(`/api/groups`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupName: newGroupName.trim(), username })
       });
 
@@ -176,10 +192,9 @@ export default function HomeScreen() {
     if (!inviteCodeInput.trim()) return;
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/api/groups/join`, {
+      // Replaced with fetchWithAuth
+      const res = await fetchWithAuth(`/api/groups/join`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteCode: inviteCodeInput.trim(), username })
       });
 
@@ -202,21 +217,19 @@ export default function HomeScreen() {
     setViewState('WHEEL');
     setLoading(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
       // Map backend MemberStat to frontend WheelItem
       const wheelItems: WheelItem[] = group.members.map(m => ({
         id: m.username,
         name: m.username,
-        occurrences: m.occurrences+1,
+        occurrences: m.occurrences + 1,
         active: m.active
       }));
       setItems(wheelItems);
 
-      // Fetch Scoped Winner & Requests
+      // Replaced with fetchWithAuth
       const [winnerRes, reqRes] = await Promise.all([
-        fetch(`${API_URL}/api/current-winner/${group.id}`),
-        fetch(`${API_URL}/api/requests/group/${group.id}`)
+        fetchWithAuth(`/api/current-winner/${group.id}`),
+        fetchWithAuth(`/api/requests/group/${group.id}`)
       ]);
 
       if (winnerRes.ok) {
@@ -269,10 +282,9 @@ export default function HomeScreen() {
 
   const handleSpinAttempt = async (): Promise<boolean> => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/api/wheel-lock/${activeGroup?.id}/acquire`, {
+      // Replaced with fetchWithAuth
+      const res = await fetchWithAuth(`/api/wheel-lock/${activeGroup?.id}/acquire`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username }),
       });
 
@@ -292,11 +304,10 @@ export default function HomeScreen() {
     setModalVisible(true);
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      await fetch(`${API_URL}/api/groups/${activeGroup?.id}/members/${winningItem.name}/increment`, { method: 'PUT' });
-      await fetch(`${API_URL}/api/current-winner/${activeGroup?.id}`, {
+      // Replaced with fetchWithAuth
+      await fetchWithAuth(`/api/groups/${activeGroup?.id}/members/${winningItem.name}/increment`, { method: 'PUT' });
+      await fetchWithAuth(`/api/current-winner/${activeGroup?.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: winningItem.name })
       });
       refreshWheelData();

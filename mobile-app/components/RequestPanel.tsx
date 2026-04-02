@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Pressable, Alert, TextInput } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { fetchWithAuth } from '@/utils/api'; // <-- IMPORTED UTILITY
 
 export interface WheelItem {
     id: string;
@@ -14,7 +15,7 @@ export interface WheelItem {
 
 export interface WinnerRequest {
     id: string;
-    groupId: string; // <-- NEW
+    groupId: string;
     requesterUsername: string;
     message?: string;
     upvotes: number;
@@ -25,7 +26,7 @@ export interface WinnerRequest {
 }
 
 interface RequestPanelProps {
-    groupId: string; // <-- NEW
+    groupId: string;
     items: WheelItem[];
     requests: WinnerRequest[];
     username: string | null;
@@ -45,12 +46,11 @@ export default function RequestPanel({ groupId, items, requests, username, onRef
         if (!myWheelItem) return;
 
         try {
-            const API_URL = process.env.EXPO_PUBLIC_API_URL;
-            const response = await fetch(`${API_URL}/api/requests`, {
+            // Replaced with fetchWithAuth
+            const response = await fetchWithAuth(`/api/requests`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    groupId, // <-- Sent to backend
+                    groupId,
                     requesterUsername: username,
                     message
                 }),
@@ -71,10 +71,9 @@ export default function RequestPanel({ groupId, items, requests, username, onRef
 
     const handleVote = async (requestId: string, voteType: 'UP' | 'DOWN') => {
         try {
-            const API_URL = process.env.EXPO_PUBLIC_API_URL;
-            const response = await fetch(`${API_URL}/api/requests/${requestId}/vote`, {
+            // Replaced with fetchWithAuth
+            const response = await fetchWithAuth(`/api/requests/${requestId}/vote`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, voteType }),
             });
 
