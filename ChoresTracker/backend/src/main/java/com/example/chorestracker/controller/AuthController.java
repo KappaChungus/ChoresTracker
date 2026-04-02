@@ -1,6 +1,6 @@
-package com.example.chorestracker.Controller;
+package com.example.chorestracker.controller;
 
-import com.example.chorestracker.Model.User;
+import com.example.chorestracker.model.User;
 import com.example.chorestracker.dto.AuthRequest;
 import com.example.chorestracker.repository.IUserRepository;
 import org.springframework.beans.factory.annotation.Autowired;

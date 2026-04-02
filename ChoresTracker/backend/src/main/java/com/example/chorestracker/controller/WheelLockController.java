@@ -1,7 +1,7 @@
-package com.example.chorestracker.Controller;
+package com.example.chorestracker.controller;
 
-import com.example.chorestracker.Model.WheelGroup;
-import com.example.chorestracker.Model.WheelLock;
+import com.example.chorestracker.model.WheelGroup;
+import com.example.chorestracker.model.WheelLock;
 import com.example.chorestracker.repository.IWheelGroupRepository;
 import com.example.chorestracker.repository.IWheelLockRepository;
 import org.springframework.beans.factory.annotation.Autowired;

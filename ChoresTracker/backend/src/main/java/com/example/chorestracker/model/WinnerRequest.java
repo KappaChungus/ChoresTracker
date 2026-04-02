@@ -1,4 +1,4 @@
-package com.example.chorestracker.Model;
+package com.example.chorestracker.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;

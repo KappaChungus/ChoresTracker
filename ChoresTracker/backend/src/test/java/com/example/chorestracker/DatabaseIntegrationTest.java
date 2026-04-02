@@ -1,9 +1,9 @@
 package com.example.chorestracker;
 
-import com.example.chorestracker.Model.MemberStat;
-import com.example.chorestracker.Model.WheelGroup;
-import com.example.chorestracker.Model.WheelLock;
-import com.example.chorestracker.Model.WinnerRequest;
+import com.example.chorestracker.model.MemberStat;
+import com.example.chorestracker.model.WheelGroup;
+import com.example.chorestracker.model.WheelLock;
+import com.example.chorestracker.model.WinnerRequest;
 import com.example.chorestracker.repository.IWheelGroupRepository;
 import com.example.chorestracker.repository.IWheelLockRepository;
 import com.example.chorestracker.repository.IWinnerRequestRepository;

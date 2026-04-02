@@ -1,4 +1,4 @@
-package com.example.chorestracker.Model;
+package com.example.chorestracker.model;
 
 import lombok.Data;
 

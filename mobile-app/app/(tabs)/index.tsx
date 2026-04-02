@@ -208,7 +208,7 @@ export default function HomeScreen() {
       const wheelItems: WheelItem[] = group.members.map(m => ({
         id: m.username,
         name: m.username,
-        occurrences: m.occurrences,
+        occurrences: m.occurrences+1,
         active: m.active
       }));
       setItems(wheelItems);

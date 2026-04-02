@@ -1,7 +1,7 @@
-package com.example.chorestracker.Controller;
+package com.example.chorestracker.controller;
 
-import com.example.chorestracker.Model.MemberStat;
-import com.example.chorestracker.Model.WheelGroup;
+import com.example.chorestracker.model.MemberStat;
+import com.example.chorestracker.model.WheelGroup;
 import com.example.chorestracker.repository.IWheelGroupRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -132,4 +132,5 @@ public class WheelController {
                 .toList();
         return ResponseEntity.ok(userGroups);
     }
+
 }
