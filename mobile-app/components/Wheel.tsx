@@ -21,7 +21,9 @@ interface WheelItem {
 
 interface WheelProps {
     items: WheelItem[];
-    probabilities: number[]; // <-- We now accept probabilities
+    probabilities: number[];
+    disabled: boolean; // <-- NEW
+    onSpinAttempt: () => Promise<boolean>; // <-- NEW
     onSpinEnd: (winner: WheelItem) => void;
 }
 
@@ -45,7 +47,7 @@ const WHEEL_SIZE = 300;
 const RADIUS = WHEEL_SIZE / 2;
 const COLORS = ['#4A90E2', '#50E3C2', '#F5A623', '#D0021B', '#BD10E0', '#9013FE', '#7ED321'];
 
-export default function Wheel({ items, probabilities, onSpinEnd }: WheelProps) {
+export default function Wheel({ items, probabilities, disabled, onSpinAttempt, onSpinEnd }: WheelProps) {
     const rotation = useSharedValue(0);
     const isSpinning = useSharedValue(false);
 
@@ -53,8 +55,15 @@ export default function Wheel({ items, probabilities, onSpinEnd }: WheelProps) {
         transform: [{ rotate: `${rotation.value}deg` }],
     }));
 
-    const spin = () => {
-        if (isSpinning.value || items.length < 2) return;
+    // Change to async function
+    const spin = async () => {
+        // Stop if already spinning, not enough items, OR globally disabled
+        if (isSpinning.value || items.length < 2 || disabled) return;
+
+        // Ask backend for permission!
+        const canSpin = await onSpinAttempt();
+        if (!canSpin) return;
+
         isSpinning.value = true;
 
         const randomSpins = Math.floor(Math.random() * 5) + 8;
@@ -69,7 +78,6 @@ export default function Wheel({ items, probabilities, onSpinEnd }: WheelProps) {
                     const finalRotation = targetRotation % 360;
                     const winningAngle = (360 - finalRotation) % 360;
 
-                    // NEW WINNER LOGIC
                     let cumulativeAngle = 0;
                     let winnerIndex = -1;
 
@@ -91,13 +99,12 @@ export default function Wheel({ items, probabilities, onSpinEnd }: WheelProps) {
         );
     };
 
-    const tapGesture = Gesture.Tap().onEnd(spin);
+    const tapGesture = Gesture.Tap().onEnd(() => runOnJS(spin)());
 
-    // NEW RENDER LOGIC
     let cumulativeAngle = 0;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, disabled && { opacity: 0.5 }]}> {/* Visually dim when locked */}
             <View style={styles.pointer} />
             <GestureDetector gesture={tapGesture}>
                 <Animated.View style={animatedStyle}>

@@ -1,112 +1,236 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// mobile-app/app/(tabs)/explore.tsx
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import React, { useEffect, useState, useCallback } from 'react';
+import { StyleSheet, View, ActivityIndicator, Pressable, ScrollView, Alert } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import { useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
 
-export default function TabTwoScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
-  );
+interface WheelItem {
+    id: string;
+    name: string;
+    active: boolean;
+}
+
+interface WinnerRequest {
+    id: string;
+    requesterUsername: string;
+    wheelItemName: string;
+    upvotes: number;
+    downvotes: number;
+    votedUsers: string[];
+    status: string;
+    createdAt: string;
+}
+
+export default function RequestPanelScreen() {
+    const [username, setUsername] = useState<string | null>(null);
+    const [wheelItems, setWheelItems] = useState<WheelItem[]>([]);
+    const [requests, setRequests] = useState<WinnerRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch data whenever this tab comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [])
+    );
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const storedUser = await SecureStore.getItemAsync('userToken');
+            setUsername(storedUser);
+
+            const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+            const [itemsRes, reqRes] = await Promise.all([
+                fetch(`${API_URL}/api/wheel-items`),
+                fetch(`${API_URL}/api/requests`)
+            ]);
+
+            if (itemsRes.ok) setWheelItems(await itemsRes.json());
+            if (reqRes.ok) {
+                const reqData: WinnerRequest[] = await reqRes.json();
+                // Sort newest first
+                reqData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                setRequests(reqData);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateRequest = async (item: WheelItem) => {
+        try {
+            const API_URL = process.env.EXPO_PUBLIC_API_URL;
+            const response = await fetch(`${API_URL}/api/requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    requesterUsername: username,
+                    wheelItemId: item.id,
+                    wheelItemName: item.name
+                }),
+            });
+
+            if (response.ok) {
+                Alert.alert("Success", "Request submitted for voting!");
+                fetchData(); // Refresh list
+            }
+        } catch (e) {
+            Alert.alert("Error", "Could not submit request.");
+        }
+    };
+
+    const handleVote = async (requestId: string, voteType: 'UP' | 'DOWN') => {
+        try {
+            const API_URL = process.env.EXPO_PUBLIC_API_URL;
+            const response = await fetch(`${API_URL}/api/requests/${requestId}/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, voteType }),
+            });
+
+            if (response.ok) {
+                fetchData(); // Refresh list to get updated votes and status
+            } else {
+                const err = await response.text();
+                Alert.alert("Vote Failed", err);
+            }
+        } catch (e) {
+            Alert.alert("Error", "Could not submit vote.");
+        }
+    };
+
+    if (loading) {
+        return <View style={styles.center}><ActivityIndicator size="large" color="#4A90E2" /></View>;
+    }
+
+    const pendingRequests = requests.filter(r => r.status === 'PENDING');
+    const historyRequests = requests.filter(r => r.status !== 'PENDING');
+
+    return (
+        <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+            <ThemedText type="title" style={{ marginBottom: 20 }}>Requests Panel</ThemedText>
+
+            {/* --- CREATE NEW REQUEST SECTION --- */}
+            <ThemedView style={styles.card}>
+                <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Make a Request</ThemedText>
+                <ThemedText style={{ marginBottom: 15, fontSize: 14 }}>
+                    Who should be assigned as the winner without spinning?
+                </ThemedText>
+                <View style={styles.chipContainer}>
+                    {wheelItems.filter(i => i.active).map(item => (
+                        <Pressable key={item.id} style={styles.chip} onPress={() => handleCreateRequest(item)}>
+                            <ThemedText style={styles.chipText}>Request: {item.name}</ThemedText>
+                        </Pressable>
+                    ))}
+                </View>
+            </ThemedView>
+
+            {/* --- ACTIVE VOTES SECTION --- */}
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Active Votes</ThemedText>
+            {pendingRequests.length === 0 ? (
+                <ThemedText style={styles.emptyText}>No pending requests.</ThemedText>
+            ) : (
+                pendingRequests.map(req => {
+                    const hasVoted = req.votedUsers.includes(username || '');
+                    return (
+                        <ThemedView key={req.id} style={styles.card}>
+                            <ThemedText type="defaultSemiBold" style={{ color: '#4A90E2' }}>
+                                {req.requesterUsername} requested for {req.wheelItemName}
+                            </ThemedText>
+
+                            <View style={styles.voteStats}>
+                                <ThemedText>👍 {req.upvotes} Upvotes</ThemedText>
+                                <ThemedText>👎 {req.downvotes} Downvotes</ThemedText>
+                            </View>
+
+                            {!hasVoted ? (
+                                <View style={styles.voteButtons}>
+                                    <Pressable style={[styles.voteBtn, { backgroundColor: '#50E3C2' }]} onPress={() => handleVote(req.id, 'UP')}>
+                                        <ThemedText style={styles.btnText}>Upvote</ThemedText>
+                                    </Pressable>
+                                    <Pressable style={[styles.voteBtn, { backgroundColor: '#ff4444' }]} onPress={() => handleVote(req.id, 'DOWN')}>
+                                        <ThemedText style={styles.btnText}>Downvote</ThemedText>
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <ThemedText style={{ color: '#888', marginTop: 10, textAlign: 'center' }}>You have already voted.</ThemedText>
+                            )}
+                        </ThemedView>
+                    );
+                })
+            )}
+
+            {/* --- HISTORY SECTION --- */}
+            <ThemedText type="subtitle" style={[styles.sectionTitle, { marginTop: 30 }]}>History</ThemedText>
+            {historyRequests.length === 0 ? (
+                <ThemedText style={styles.emptyText}>No history yet.</ThemedText>
+            ) : (
+                historyRequests.map(req => (
+                    <ThemedView key={req.id} style={[styles.card, { opacity: 0.8 }]}>
+                        <ThemedText>
+                            <ThemedText type="defaultSemiBold">{req.requesterUsername}</ThemedText> requested <ThemedText type="defaultSemiBold">{req.wheelItemName}</ThemedText>
+                        </ThemedText>
+                        <View style={[styles.statusBadge, { backgroundColor: req.status === 'APPROVED' ? 'rgba(80, 227, 194, 0.2)' : 'rgba(255, 68, 68, 0.2)' }]}>
+                            <ThemedText style={{ color: req.status === 'APPROVED' ? '#50E3C2' : '#ff4444', fontWeight: 'bold' }}>
+                                {req.status}
+                            </ThemedText>
+                        </View>
+                    </ThemedView>
+                ))
+            )}
+        </ScrollView>
+    );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+    container: { flex: 1 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    sectionTitle: { marginTop: 20, marginBottom: 10 },
+    card: {
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    chip: {
+        backgroundColor: '#4A90E2',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+    },
+    chipText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+    emptyText: { color: '#888', fontStyle: 'italic' },
+    voteStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 15,
+        paddingVertical: 10,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.1)'
+    },
+    voteButtons: { flexDirection: 'row', gap: 10, marginTop: 10 },
+    voteBtn: {
+        flex: 1,
+        padding: 10,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    btnText: { color: 'white', fontWeight: 'bold' },
+    statusBadge: {
+        alignSelf: 'flex-start',
+        marginTop: 10,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+    }
 });
