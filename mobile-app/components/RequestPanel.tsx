@@ -172,7 +172,8 @@ export default function RequestPanel({ groupId, items, requests, username, onRef
                 historyRequests.map(req => (
                     <ThemedView key={req.id} style={[styles.card, { opacity: 0.8 }]}>
                         <ThemedText>
-                            <ThemedText type="defaultSemiBold">{req.requesterUsername}</ThemedText> requested to be the winner
+                            <ThemedText type="defaultSemiBold">{req.requesterUsername}</ThemedText>
+                            <ThemedText> requested to be the winner</ThemedText>
                         </ThemedText>
                         {req.message ? (
                             <ThemedText style={[styles.messageText, { color: '#888' }]}>"{req.message}"</ThemedText>

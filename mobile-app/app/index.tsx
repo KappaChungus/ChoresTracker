@@ -9,7 +9,8 @@ import {
   Alert,
   TextInput,
   ScrollView,
-  useColorScheme
+  useColorScheme,
+  Image
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -58,7 +59,7 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [winner, setWinner] = useState<WheelItem | null>(null);
   const [currentWinnerInfo, setCurrentWinnerInfo] = useState<CurrentWinnerInfo | null>(null);
-  const [elapsedTime, setElapsedTime] = useState<string>('');
+  const [elapsedTime, setElapsedTime] = useState<string>('0s');
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   // --- INITIALIZATION ---
@@ -212,10 +213,10 @@ export default function HomeScreen() {
   };
 
   // --- WHEEL LOGIC (Scoped to Group) ---
-  const loadGroupData = async (group: WheelGroup) => {
+  const loadGroupData = async (group: WheelGroup,isSilentRefresh = false) => {
     setActiveGroup(group);
     setViewState('WHEEL');
-    setLoading(true);
+    if (!isSilentRefresh) setLoading(true);
     try {
       // Map backend MemberStat to frontend WheelItem
       const wheelItems: WheelItem[] = group.members.map(m => ({
@@ -247,12 +248,24 @@ export default function HomeScreen() {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!isSilentRefresh) setLoading(false);
     }
   };
 
   const refreshWheelData = async () => {
-    if (activeGroup) await loadGroupData(activeGroup);
+    if (activeGroup) {
+      try {
+        const res = await fetchWithAuth(`/api/groups/${activeGroup.id}`);
+        if (res.ok) {
+          const updatedGroup: WheelGroup = await res.json();
+          await loadGroupData(updatedGroup, true);
+        } else {
+          console.error("Failed to refresh group data.");
+        }
+      } catch (e) {
+        console.error("Error during group data refresh:", e);
+      }
+    }
   };
 
   const sectorProbabilities = useMemo(() => {
@@ -304,7 +317,6 @@ export default function HomeScreen() {
     setModalVisible(true);
 
     try {
-      // Replaced with fetchWithAuth
       await fetchWithAuth(`/api/groups/${activeGroup?.id}/members/${winningItem.name}/increment`, { method: 'PUT' });
       await fetchWithAuth(`/api/current-winner/${activeGroup?.id}`, {
         method: 'POST',
@@ -418,7 +430,10 @@ export default function HomeScreen() {
   // viewState === 'WHEEL'
   return (
       <>
-        <ParallaxScrollView headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }} headerImage={<ThemedText style={styles.headerEmoji}>🎡</ThemedText>}>
+        <ParallaxScrollView
+            headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+            headerImage={<Image source={require('@/assets/images/nega.png')} style={styles.headerImage} />}
+        >
 
           <View style={styles.headerRow}>
             {/* Left: Back Button */}
@@ -458,11 +473,11 @@ export default function HomeScreen() {
 
           {items.length > 1 ? (
               <View>
-                {lockMessage && (
+                {lockMessage ? (
                     <ThemedView style={styles.lockBanner}>
                       <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>🔒 {lockMessage}</ThemedText>
                     </ThemedView>
-                )}
+                ) : null}
                 <Wheel items={items.filter(item => item.active)} probabilities={sectorProbabilities} disabled={false} onSpinAttempt={handleSpinAttempt} onSpinEnd={handleSpinEnd} />
               </View>
           ) : (
@@ -501,7 +516,14 @@ const styles = StyleSheet.create({
   currentWinnerContainer: { marginHorizontal: 20, padding: 15, borderRadius: 12, alignItems: 'center', backgroundColor: 'rgba(74, 144, 226, 0.1)', borderWidth: 1, borderColor: 'rgba(74, 144, 226, 0.3)' },
   currentWinnerText: { fontSize: 18, fontWeight: 'bold', color: '#4A90E2' },
   timerText: { fontSize: 14, marginTop: 4, fontVariant: ['tabular-nums'] },
-  headerEmoji: { fontSize: 80, bottom: 10, left: 20, position: 'absolute' },
+  headerImage: {
+    width: 100,
+    height: 100,
+    bottom: -15,
+    left: 20,
+    position: 'absolute',
+    resizeMode: 'contain',
+  },
   centeredText: { textAlign: 'center', marginTop: 40, fontSize: 16, paddingHorizontal: 20 },
   lockBanner: { backgroundColor: '#ff4444', padding: 10, borderRadius: 8, marginBottom: 10, alignItems: 'center' },
 

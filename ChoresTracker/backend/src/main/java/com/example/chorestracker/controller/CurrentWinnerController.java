@@ -20,7 +20,7 @@ public class CurrentWinnerController {
     private ICurrentWinnerRepository currentWinnerRepository;
 
     @Autowired
-    private IWheelGroupRepository groupRepository; // <-- Added this
+    private IWheelGroupRepository groupRepository;
 
     @GetMapping("/{groupId}")
     public ResponseEntity<?> getCurrentWinner(@PathVariable String groupId) {

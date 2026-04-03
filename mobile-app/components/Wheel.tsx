@@ -104,7 +104,7 @@ export default function Wheel({ items, probabilities, disabled, onSpinAttempt, o
     let cumulativeAngle = 0;
 
     return (
-        <View style={[styles.container, disabled && { opacity: 0.5 }]}> {/* Visually dim when locked */}
+        <View style={[styles.container, disabled && { opacity: 0.5 }]}>
             <View style={styles.pointer} />
             <GestureDetector gesture={tapGesture}>
                 <Animated.View style={animatedStyle}>
