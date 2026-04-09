@@ -61,6 +61,7 @@ export default function HomeScreen() {
   const [currentWinnerInfo, setCurrentWinnerInfo] = useState<CurrentWinnerInfo | null>(null);
   const [elapsedTime, setElapsedTime] = useState<string>('0s');
   const [lockMessage, setLockMessage] = useState<string | null>(null);
+  const [lockTimeLeft, setLockTimeLeft] = useState<number | null>(null); // <-- Add this
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -213,10 +214,14 @@ export default function HomeScreen() {
   };
 
   // --- WHEEL LOGIC (Scoped to Group) ---
-  const loadGroupData = async (group: WheelGroup,isSilentRefresh = false) => {
+  const loadGroupData = async (group: WheelGroup, isSilentRefresh = false) => {
     setActiveGroup(group);
     setViewState('WHEEL');
-    if (!isSilentRefresh) setLoading(true);
+    if (!isSilentRefresh) {
+      setLockMessage(null);
+      setLockTimeLeft(null);
+      setLoading(true);
+    }
     try {
       // Map backend MemberStat to frontend WheelItem
       const wheelItems: WheelItem[] = group.members.map(m => ({
@@ -227,10 +232,11 @@ export default function HomeScreen() {
       }));
       setItems(wheelItems);
 
-      // Replaced with fetchWithAuth
-      const [winnerRes, reqRes] = await Promise.all([
+      // Fetch winner, requests, AND lock status all at the same time!
+      const [winnerRes, reqRes, lockRes] = await Promise.all([
         fetchWithAuth(`/api/current-winner/${group.id}`),
-        fetchWithAuth(`/api/requests/group/${group.id}`)
+        fetchWithAuth(`/api/requests/group/${group.id}`),
+        fetchWithAuth(`/api/wheel-lock/${group.id}`) // <-- Fetch current lock status
       ]);
 
       if (winnerRes.ok) {
@@ -245,6 +251,20 @@ export default function HomeScreen() {
         reqData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setRequests(reqData);
       }
+
+      // --- Process the Lock Status ---
+      if (lockRes.ok) {
+        const lockData = await lockRes.json();
+        // If the backend says it's locked, immediately restore the timer and message
+        if (lockData.isLocked && lockData.remainingSeconds > 0) {
+          setLockTimeLeft(lockData.remainingSeconds);
+          setLockMessage(`Wheel was recently spun by ${lockData.lockedBy}.`);
+        } else if (!isSilentRefresh) {
+          setLockTimeLeft(null);
+          setLockMessage(null);
+        }
+      }
+
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -293,21 +313,55 @@ export default function HomeScreen() {
     return () => clearInterval(intervalId);
   }, [currentWinnerInfo]);
 
+  useEffect(() => {
+    if (lockTimeLeft === null || lockTimeLeft <= 0) {
+      if (lockTimeLeft === 0) {
+        setLockMessage(null);
+        setLockTimeLeft(null);
+      }
+      return;
+    }
+
+    const timerId = setInterval(() => {
+      setLockTimeLeft((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [lockTimeLeft]);
+
   const handleSpinAttempt = async (): Promise<boolean> => {
     try {
-      // Replaced with fetchWithAuth
       const res = await fetchWithAuth(`/api/wheel-lock/${activeGroup?.id}/acquire`, {
         method: 'POST',
         body: JSON.stringify({ username }),
       });
 
       if (res.status === 409) {
-        setLockMessage(await res.text());
-        setTimeout(() => setLockMessage(null), 3500);
+        // 1. Read the raw response as text first so it doesn't crash
+        const rawText = await res.text();
+        console.log("Raw 409 response from backend:", rawText);
+
+        try {
+          // 2. Safely try to parse it as JSON
+          const data = JSON.parse(rawText);
+
+          setLockTimeLeft(data.unlocksIn);
+          setLockMessage(data.message);
+        } catch (parseError) {
+          // 3. If it fails, it means the backend is still sending plain text!
+          console.error("Failed to parse JSON. The backend sent a plain string:", rawText);
+
+          // Fallback so the app doesn't break
+          setLockMessage(rawText);
+          setLockTimeLeft(60);
+        }
+
         return false;
       }
-      return true;
+
+      return res.ok;
     } catch (e) {
+      console.error("Network error during spin attempt:", e);
       return false;
     }
   };
@@ -437,7 +491,11 @@ export default function HomeScreen() {
 
           <View style={styles.headerRow}>
             {/* Left: Back Button */}
-            <Pressable style={{ flex: 1 }} onPress={() => setViewState('GROUPS')}>
+            <Pressable style={{ flex: 1 }} onPress={() => {
+              setViewState('GROUPS');
+              setLockMessage(null); // <-- Add this
+              setLockTimeLeft(null); // <-- Add this
+            }}>
               <ThemedText style={{ color: '#4A90E2' }}>← Back</ThemedText>
             </Pressable>
 
@@ -475,10 +533,20 @@ export default function HomeScreen() {
               <View>
                 {lockMessage ? (
                     <ThemedView style={styles.lockBanner}>
-                      <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>🔒 {lockMessage}</ThemedText>
+                      <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>
+                        🔒 {lockTimeLeft !== null
+                          ? `Unlocks in ${Math.floor(lockTimeLeft / 60)} mins : ${(lockTimeLeft % 60).toString().padStart(2, '0')} secs`
+                          : lockMessage}
+                      </ThemedText>
                     </ThemedView>
                 ) : null}
-                <Wheel items={items.filter(item => item.active)} probabilities={sectorProbabilities} disabled={false} onSpinAttempt={handleSpinAttempt} onSpinEnd={handleSpinEnd} />
+                <Wheel
+                    items={items.filter(item => item.active)}
+                    probabilities={sectorProbabilities}
+                    disabled={!!lockMessage}
+                    onSpinAttempt={handleSpinAttempt}
+                    onSpinEnd={handleSpinEnd}
+                />
               </View>
           ) : (
               <ThemedText style={styles.centeredText}>Add at least two members to spin!</ThemedText>

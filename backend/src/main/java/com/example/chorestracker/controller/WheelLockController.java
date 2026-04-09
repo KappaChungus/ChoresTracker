@@ -66,7 +66,7 @@ public class WheelLockController {
         // 1. BOUNDARY CHECK: Ensure the group exists and the user is a member
         Optional<WheelGroup> groupOpt = groupRepository.findById(groupId);
         if (groupOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body("Group not found.");
+            return ResponseEntity.badRequest().body(Map.of("error", "Group not found."));
         }
 
         WheelGroup group = groupOpt.get();
@@ -75,7 +75,7 @@ public class WheelLockController {
 
         if (!isMember) {
             // Return 403 Forbidden if they are not in the group
-            return ResponseEntity.status(403).body("You are not a member of this group.");
+            return ResponseEntity.status(403).body(Map.of("error", "You are not a member of this group."));
         }
 
         // 2. Fetch the lock specific to this group
@@ -83,14 +83,16 @@ public class WheelLockController {
 
         // 3. Check if someone else already holds a valid lock for this group
         if (lock.isLocked() && lock.getLockedUntil() != null && lock.getLockedUntil().isAfter(LocalDateTime.now())) {
-            long remainingMinutes = Duration.between(LocalDateTime.now(), lock.getLockedUntil()).toMinutes();
-            long remainingSeconds = Duration.between(LocalDateTime.now(), lock.getLockedUntil()).getSeconds() % 60;
+            // Calculate total seconds remaining
+            long totalSecondsLeft = Duration.between(LocalDateTime.now(), lock.getLockedUntil()).getSeconds();
 
-            String timeString = remainingMinutes > 0 ?
-                    remainingMinutes + "m " + remainingSeconds + "s" :
-                    remainingSeconds + "s";
+            // Create a structured JSON response
+            Map<String, Object> lockedResponse = new HashMap<>();
+            lockedResponse.put("lockedBy", lock.getLockedBy());
+            lockedResponse.put("unlocksIn", totalSecondsLeft); // Just the raw number of seconds
+            lockedResponse.put("message", "Wheel was recently spun by " + lock.getLockedBy() + ".");
 
-            return ResponseEntity.status(409).body("Wheel was recently spun by " + lock.getLockedBy() + ". Unlocks in " + timeString + ".");
+            return ResponseEntity.status(409).body(lockedResponse);
         }
 
         // 4. Grant the lock for 1 Hour

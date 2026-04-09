@@ -100,81 +100,86 @@ export default function Wheel({ items, probabilities, disabled, onSpinAttempt, o
             },
         );
     };
-    const progressStyle = useAnimatedStyle(() => ({
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        height: 6,
-        width: `${holdProgress.value * 100}%`,
-        backgroundColor: '#E53E3E',
-    }));
+    const progressStyle = useAnimatedStyle(() => {
+        const isFullyCharged = holdProgress.value >= 0.99;
+
+        return {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            height: 6,
+            width: `${holdProgress.value * 100}%`,
+            backgroundColor: isFullyCharged ? '#50E3C2' : '#E53E3E',
+        };
+    });
 
     const longPress = Gesture.LongPress()
-        .minDuration(3000)
-        .maxDistance(7)
+        .minDuration(1500)
+        .maxDistance(15)
         .onBegin(() => {
             if (disabled) return;
             cancelAnimation(holdProgress);
             holdProgress.value = 0;
-            holdProgress.value = withTiming(1, { duration: 3000 });
+            // Use Easing.linear so the bar fills smoothly and consistently
+            holdProgress.value = withTiming(1, { duration: 1500, easing: Easing.linear });
         })
         .onEnd((_e, success) => {
             if (success && !disabled) {
                 runOnJS(spin)();
             }
         })
-
-    const panGesture = Gesture.Pan().minDistance(7);
-
-    const composedGesture = Gesture.Simultaneous(
-        Gesture.Pan(),
-        longPress
-    );
+        .onFinalize(() => {
+            cancelAnimation(holdProgress);
+            holdProgress.value = 0;
+        });
 
     let cumulativeAngle = 0;
 
     return (
         <View style={[styles.container, disabled && { opacity: 0.5 }]}>
             <View style={styles.pointer} />
-            <GestureDetector gesture={composedGesture}>
-                <Animated.View style={animatedStyle} collapsable={false}>
-                    <Svg height={WHEEL_SIZE} width={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
-                        <G>
-                            {items.map((item, index) => {
-                                const sectorAngle = probabilities[index] * 360;
-                                const startAngle = cumulativeAngle;
-                                const endAngle = startAngle + sectorAngle;
-                                const midAngle = startAngle + sectorAngle / 2;
-                                const textPos = polarToCartesian(RADIUS, RADIUS, RADIUS * 0.6, midAngle);
+            <GestureDetector gesture={longPress}>
+                {/* 1. Add a stationary wrapper View here */}
+                <View>
+                    <Animated.View style={animatedStyle} collapsable={false}>
+                        <Svg height={WHEEL_SIZE} width={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
+                            <G>
+                                {items.map((item, index) => {
+                                    const sectorAngle = probabilities[index] * 360;
+                                    const startAngle = cumulativeAngle;
+                                    const endAngle = startAngle + sectorAngle;
+                                    const midAngle = startAngle + sectorAngle / 2;
+                                    const textPos = polarToCartesian(RADIUS, RADIUS, RADIUS * 0.6, midAngle);
 
-                                cumulativeAngle = endAngle;
+                                    cumulativeAngle = endAngle;
 
-                                return (
-                                    <G key={item.id}>
-                                        <Path
-                                            d={describeArc(RADIUS, RADIUS, RADIUS, startAngle, endAngle)}
-                                            fill={COLORS[index % COLORS.length]}
-                                        />
-                                        <SvgText
-                                            x={textPos.x}
-                                            y={textPos.y}
-                                            fill="white"
-                                            fontSize="14"
-                                            fontWeight="bold"
-                                            textAnchor="middle"
-                                            transform={`rotate(${midAngle + 90}, ${textPos.x}, ${textPos.y})`}
-                                        >
-                                            {item.name + ": " + item.occurrences}
-                                        </SvgText>
-                                    </G>
-                                );
-                            })}
-                        </G>
-                    </Svg>
+                                    return (
+                                        <G key={item.id}>
+                                            <Path
+                                                d={describeArc(RADIUS, RADIUS, RADIUS, startAngle, endAngle)}
+                                                fill={COLORS[index % COLORS.length]}
+                                            />
+                                            <SvgText
+                                                x={textPos.x}
+                                                y={textPos.y}
+                                                fill="white"
+                                                fontSize="14"
+                                                fontWeight="bold"
+                                                textAnchor="middle"
+                                                transform={`rotate(${midAngle + 90}, ${textPos.x}, ${textPos.y})`}
+                                            >
+                                                {item.name + ": " + item.occurrences}
+                                            </SvgText>
+                                        </G>
+                                    );
+                                })}
+                            </G>
+                        </Svg>
+                    </Animated.View>
 
-                    {/* ✅ Progress bar */}
+                    {/* 2. Move the Progress bar HERE (Outside the rotating view) */}
                     <Animated.View style={progressStyle} />
-                </Animated.View>
+                </View>
             </GestureDetector>
         </View>
     );
