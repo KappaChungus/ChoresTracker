@@ -22,9 +22,8 @@ public class WheelLockController {
     private IWheelLockRepository lockRepository;
 
     @Autowired
-    private IWheelGroupRepository groupRepository; // Inject group repo to verify membership
+    private IWheelGroupRepository groupRepository;
 
-    // Use the groupId dynamically instead of a global string
     private WheelLock getOrCreateLock(String groupId) {
         return lockRepository.findById(groupId).orElseGet(() -> {
             WheelLock newLock = new WheelLock();
@@ -44,7 +43,6 @@ public class WheelLockController {
             if (remaining > 0) {
                 isCurrentlyLocked = true;
             } else {
-                // Lock expired! Auto-unlock it.
                 lock.setLocked(false);
                 lock.setLockedBy(null);
                 lock.setLockedUntil(null);
@@ -63,7 +61,6 @@ public class WheelLockController {
     public ResponseEntity<?> acquireLock(@PathVariable String groupId, @RequestBody Map<String, String> payload) {
         String username = payload.get("username");
 
-        // 1. BOUNDARY CHECK: Ensure the group exists and the user is a member
         Optional<WheelGroup> groupOpt = groupRepository.findById(groupId);
         if (groupOpt.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Group not found."));
@@ -74,11 +71,9 @@ public class WheelLockController {
                 .anyMatch(m -> m.getUsername().equalsIgnoreCase(username));
 
         if (!isMember) {
-            // Return 403 Forbidden if they are not in the group
             return ResponseEntity.status(403).body(Map.of("error", "You are not a member of this group."));
         }
 
-        // 2. Fetch the lock specific to this group
         WheelLock lock = getOrCreateLock(groupId);
 
         // 3. Check if someone else already holds a valid lock for this group

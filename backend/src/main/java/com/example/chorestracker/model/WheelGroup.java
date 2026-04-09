@@ -13,8 +13,8 @@ public class WheelGroup {
     @Id
     private String id;
 
-    private String groupName; // e.g., "The Cool Apartment"
-    private String inviteCode; // A 6-digit code for others to join
+    private String groupName;
+    private String inviteCode;
 
     private List<MemberStat> members = new ArrayList<>();
 }

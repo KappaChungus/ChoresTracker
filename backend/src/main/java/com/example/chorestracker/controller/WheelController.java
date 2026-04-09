@@ -19,7 +19,6 @@ public class WheelController {
     @Autowired
     private IWheelGroupRepository groupRepository;
 
-    // 1. Create a new group
     @PostMapping
     public ResponseEntity<?> createGroup(@RequestBody Map<String, String> payload) {
         String groupName = payload.get("groupName");
@@ -28,11 +27,9 @@ public class WheelController {
         WheelGroup group = new WheelGroup();
         group.setGroupName(groupName);
 
-        // Generate a 6-character uppercase invite code (e.g., "A8F9B2")
         String inviteCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         group.setInviteCode(inviteCode);
 
-        // Add the creator as the first active member
         MemberStat creator = new MemberStat();
         creator.setUsername(username);
         creator.setOccurrences(0);
