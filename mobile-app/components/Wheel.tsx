@@ -11,6 +11,7 @@ import Animated, {
     runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { cancelAnimation } from 'react-native-reanimated';
 
 interface WheelItem {
     id: string;
@@ -48,6 +49,7 @@ const RADIUS = WHEEL_SIZE / 2;
 const COLORS = ['#4A90E2', '#50E3C2', '#F5A623', '#D0021B', '#BD10E0', '#9013FE', '#7ED321'];
 
 export default function Wheel({ items, probabilities, disabled, onSpinAttempt, onSpinEnd }: WheelProps) {
+    const holdProgress = useSharedValue(0);
     const rotation = useSharedValue(0);
     const isSpinning = useSharedValue(false);
 
@@ -98,16 +100,44 @@ export default function Wheel({ items, probabilities, disabled, onSpinAttempt, o
             },
         );
     };
+    const progressStyle = useAnimatedStyle(() => ({
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        height: 6,
+        width: `${holdProgress.value * 100}%`,
+        backgroundColor: '#E53E3E',
+    }));
 
-    const tapGesture = Gesture.Tap().onEnd(() => runOnJS(spin)());
+    const longPress = Gesture.LongPress()
+        .minDuration(3000)
+        .maxDistance(7)
+        .onBegin(() => {
+            if (disabled) return;
+            cancelAnimation(holdProgress);
+            holdProgress.value = 0;
+            holdProgress.value = withTiming(1, { duration: 3000 });
+        })
+        .onEnd((_e, success) => {
+            if (success && !disabled) {
+                runOnJS(spin)();
+            }
+        })
+
+    const panGesture = Gesture.Pan().minDistance(7);
+
+    const composedGesture = Gesture.Simultaneous(
+        Gesture.Pan(),
+        longPress
+    );
 
     let cumulativeAngle = 0;
 
     return (
         <View style={[styles.container, disabled && { opacity: 0.5 }]}>
             <View style={styles.pointer} />
-            <GestureDetector gesture={tapGesture}>
-                <Animated.View style={animatedStyle}>
+            <GestureDetector gesture={composedGesture}>
+                <Animated.View style={animatedStyle} collapsable={false}>
                     <Svg height={WHEEL_SIZE} width={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
                         <G>
                             {items.map((item, index) => {
@@ -117,7 +147,6 @@ export default function Wheel({ items, probabilities, disabled, onSpinAttempt, o
                                 const midAngle = startAngle + sectorAngle / 2;
                                 const textPos = polarToCartesian(RADIUS, RADIUS, RADIUS * 0.6, midAngle);
 
-                                // Update for the next iteration
                                 cumulativeAngle = endAngle;
 
                                 return (
@@ -135,13 +164,16 @@ export default function Wheel({ items, probabilities, disabled, onSpinAttempt, o
                                             textAnchor="middle"
                                             transform={`rotate(${midAngle + 90}, ${textPos.x}, ${textPos.y})`}
                                         >
-                                            {item.name+ ": "+ item.occurrences}
+                                            {item.name + ": " + item.occurrences}
                                         </SvgText>
                                     </G>
                                 );
                             })}
                         </G>
                     </Svg>
+
+                    {/* ✅ Progress bar */}
+                    <Animated.View style={progressStyle} />
                 </Animated.View>
             </GestureDetector>
         </View>

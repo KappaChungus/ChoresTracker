@@ -11,7 +11,7 @@ public class CurrentWinner {
     @Id
     private String id;
 
-    private String groupId; // NEW: Which group does this winner belong to?
-    private String username; // CHANGED: Replaced wheelItemId
+    private String groupId;
+    private String username;
     private LocalDateTime winTime;
 }
