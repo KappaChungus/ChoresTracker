@@ -23,13 +23,42 @@ public class WinnerRequestController {
     @Autowired private IWinnerRequestRepository requestRepository;
     @Autowired private IWheelGroupRepository wheelGroupRepository;
     @Autowired private ICurrentWinnerRepository currentWinnerRepository;
+    @Autowired private IWheelGroupRepository groupRepository;
 
-    // Get all requests FOR A SPECIFIC GROUP
     @GetMapping("/group/{groupId}")
-    public List<WinnerRequest> getRequestsByGroup(@PathVariable String groupId) {
-        return requestRepository.findAll().stream()
-                .filter(r -> groupId.equals(r.getGroupId()))
-                .toList();
+    public ResponseEntity<List<WinnerRequest>> getGroupRequests(@PathVariable String groupId) {
+
+        List<WinnerRequest> requests = requestRepository.findByGroupId(groupId);
+        LocalDateTime oneDayAgo = LocalDateTime.now().minusDays(1);
+        boolean needsGroupSave = false;
+        WheelGroup group = null;
+        for (WinnerRequest request : requests) {
+            if ("PENDING".equalsIgnoreCase(request.getStatus())
+                    && request.getCreatedAt() != null
+                    && request.getCreatedAt().isBefore(oneDayAgo)) {
+
+                request.setStatus("APPROVED");
+                requestRepository.save(request);
+                if (group == null) {
+                    group = groupRepository.findById(groupId).orElse(null);
+                }
+                if (group != null) {
+                    group.getMembers().stream()
+                            .filter(m -> m.getUsername().equalsIgnoreCase(request.getRequesterUsername()))
+                            .findFirst()
+                            .ifPresent(member -> {
+                                member.setOccurrences(member.getOccurrences() + 2);
+                            });
+                    needsGroupSave = true;
+                }
+            }
+        }
+        System.out.println("called");
+
+        if (needsGroupSave && group != null) {
+            groupRepository.save(group);
+        }
+        return ResponseEntity.ok(requests);
     }
 
     // Create a new request
